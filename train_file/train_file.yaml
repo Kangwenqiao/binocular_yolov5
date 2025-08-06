@@ -1,0 +1,11 @@
+train: ../ai_game_data/train/vis/
+train2: ../ai_game_data/train/ir/
+val: ../ai_game_data/val/vis/
+val2: ../ai_game_data/val/ir/
+test: ../ai_game_data/test/vis/
+test2: ../ai_game_data/test/ir/
+# number of classes
+nc: 5
+
+# class names
+names: [ 'person', 'cyclist','car', 'truck', 'bus']
