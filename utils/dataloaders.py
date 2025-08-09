@@ -119,7 +119,8 @@ def create_dataloader(path,
                       quad=False,
                       prefix='',
                       shuffle=False,
-                      seed=0):
+                      seed=0,
+                      subset=1.0):
     if rect and shuffle:
         LOGGER.warning('WARNING ⚠ --rect is incompatible with DataLoader shuffle, setting shuffle=False')
         shuffle = False
@@ -137,7 +138,8 @@ def create_dataloader(path,
             stride=int(stride),
             pad=pad,
             image_weights=image_weights,
-            prefix=prefix)
+            prefix=prefix,
+            subset=subset)
     batch_size = min(batch_size, len(dataset))
     nd = torch.cuda.device_count()  # number of CUDA devices
     nw = min([os.cpu_count() // max(nd, 1), batch_size if batch_size > 1 else 0, workers])  # number of workers
@@ -463,7 +465,8 @@ class LoadImagesAndLabels(Dataset):
                  stride=32,
                  pad=0.0,
                  min_items=0,
-                 prefix=''):
+                 prefix='',
+                 subset=1.0):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -475,6 +478,7 @@ class LoadImagesAndLabels(Dataset):
         self.path = path
         self.path2 = path2
         self.albumentations = Albumentations(size=img_size) if augment else None
+        self.subset = subset
 
         cache = self.get_cache(self.path)
         cache2 = self.get_cache(self.path2)
@@ -487,7 +491,21 @@ class LoadImagesAndLabels(Dataset):
         self.im_files = list(cache.keys())
         self.im_files2 = list(cache2.keys())
         self.label_files = img2label_paths(self.im_files)
-        n = len(shapes)
+
+        # Subset sampling for mini datasets
+        if self.subset < 1.0:
+            total = len(self.im_files)
+            sample_size = max(1, int(total * self.subset))
+            rng = random.Random(0)  # deterministic sampling
+            selected = sorted(rng.sample(range(total), sample_size))
+            self.im_files = [self.im_files[i] for i in selected]
+            self.im_files2 = [self.im_files2[i] for i in selected]
+            self.label_files = [self.label_files[i] for i in selected]
+            self.labels = [self.labels[i] for i in selected]
+            self.shapes = self.shapes[selected]
+            self.segments = [self.segments[i] for i in selected]
+
+        n = len(self.im_files)
         bi = np.floor(np.arange(n) / batch_size).astype(int)
         nb = bi[-1] + 1  # number of batches
         self.batch = bi  # batch index of image

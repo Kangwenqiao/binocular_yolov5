@@ -1,4 +1,4 @@
-# YOLOv5 🚀 by Ultralytics, GPL-3.0 license
+# YOLOv5  by Ultralytics, GPL-3.0 license
 """
 在自定义数据集上训练 YOLOv5 模型。
 模型权重与数据集可按需自动下载（源自官方最新版本）。
@@ -204,7 +204,8 @@ def train(hyp, opt, device, callbacks):  # hyp 可以是 hyp.yaml 的路径，�
                                               image_weights=opt.image_weights,
                                               quad=opt.quad,
                                               prefix=colorstr('训练: '),
-                                              shuffle=True)
+                                              shuffle=True,
+                                              subset=0.1 if opt.mini else 1.0)
     labels = np.concatenate(dataset.labels, 0)
     mlc = int(labels[:, 0].max())  # 最大标签类别
     assert mlc < nc, f'标签类别 {mlc} 超过了 nc={nc} 在 {data} 中。可能的类别标签为 0-{nc - 1}'
@@ -224,7 +225,8 @@ def train(hyp, opt, device, callbacks):  # hyp 可以是 hyp.yaml 的路径，�
                                        rank=-1,
                                        workers=workers * 2,
                                        pad=0.5,
-                                       prefix=colorstr('验证: '))[0]
+                                       prefix=colorstr('验证: '),
+                                       subset=0.1 if opt.mini else 1.0)[0]
 
         if not resume:
             if not opt.noautoanchor:
@@ -449,9 +451,9 @@ def parse_opt(known=False):
     parser.add_argument('--cfg', type=str, default='models/v5s_ai_game.yaml', help='模型配置文件路径')
     parser.add_argument('--data', type=str, default=ROOT / 'train_file/train_file.yaml')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='超参数文件路径')
-    parser.add_argument('--epochs', type=int, default=600, help='总训练轮数')
-    parser.add_argument('--batch-size', type=int, default=512, help='所有GPU的总批次大小，-1为自动批次')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='训练、验证图像尺寸（像素）')
+    parser.add_argument('--epochs', type=int, default=300, help='总训练轮数')  # 从600降到300
+    parser.add_argument('--batch-size', type=int, default=32, help='所有GPU的总批次大小，-1为自动批次')  # 从512降到128
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=512, help='训练、验证图像尺寸（像素）')  # 从640降到512
     parser.add_argument('--rect', action='store_true', help='矩形训练')
     parser.add_argument('--resume', nargs='?', const=False, default=False, help='恢复最近的训练')
     parser.add_argument('--nosave', action='store_true', help='只保存最终检查点')
@@ -460,26 +462,26 @@ def parse_opt(known=False):
     parser.add_argument('--noplots', action='store_true', help='不保存图表文件')
     parser.add_argument('--evolve', type=int, nargs='?', const=300, help='进化超参数x代')
     parser.add_argument('--bucket', type=str, default='', help='gsutil 存储桶')
-    parser.add_argument('--cache', type=str, nargs='?', const='ram', help='--cache 图像到"ram"（默认）或"disk"')
+    parser.add_argument('--cache', type=str, nargs='?', const='disk', help='--cache 图像到"ram"（默认）或"disk"')  # 默认改为disk
     parser.add_argument('--image-weights', action='store_true', help='训练时使用加权图像选择')
-    parser.add_argument('--device', default='2,3', help='cuda设备，即0或0,1,2,3或cpu')
+    parser.add_argument('--device', default='0', help='cuda设备，即0或0,1,2,3或cpu')
     parser.add_argument('--multi-scale', action='store_true', help='变化图像尺寸+/-50%%')
     parser.add_argument('--single-cls', action='store_true', help='将多类数据作为单类训练')
-    parser.add_argument('--optimizer', type=str, choices=['SGD', 'Adam', 'AdamW'], default='SGD', help='优化器')
+    parser.add_argument('--optimizer', type=str, choices=['SGD', 'Adam', 'AdamW'], default='AdamW', help='优化器')  # 改为AdamW
     parser.add_argument('--sync-bn', action='store_true', help='使用同步批归一化，仅在DDP模式下可用')
-    parser.add_argument('--workers', type=int, default=8, help='最大数据加载器工作进程数（DDP模式下每个RANK）')
+    parser.add_argument('--workers', type=int, default=0, help='最大数据加载器工作进程数（DDP模式下每个RANK）')  # 改为0
     parser.add_argument('--project', default=ROOT / 'runs/train', help='保存到项目/名称')
-    parser.add_argument('--name', default='exp', help='保存到项目/名称')
+    parser.add_argument('--name', default='binocular_exp', help='保存到项目/名称')  # 改个更有意义的名字
     parser.add_argument('--exist-ok', action='store_true', help='现有项目/名称确定，不递增')
     parser.add_argument('--quad', action='store_true', help='四元数据加载器')
     parser.add_argument('--cos-lr', action='store_true', help='余弦学习率调度器')
-    parser.add_argument('--label-smoothing', type=float, default=0.0, help='标签平滑epsilon')
-    parser.add_argument('--patience', type=int, default=100, help='早停耐心值（没有改进的轮数）')
+    parser.add_argument('--label-smoothing', type=float, default=0.1, help='标签平滑epsilon')  # 从0.0改为0.1
+    parser.add_argument('--patience', type=int, default=50, help='早停耐心值（没有改进的轮数）')  # 从100降到50
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='冻结层：backbone=10，前3层=0 1 2')
-    parser.add_argument('--save-period', type=int, default=-1, help='每x轮保存检查点（<1时禁用）')
-    parser.add_argument('--seed', type=int, default=0, help='全局训练种子')
+    parser.add_argument('--save-period', type=int, default=25, help='每x轮保存检查点（<1时禁用）')  # 从-1改为25
+    parser.add_argument('--seed', type=int, default=42, help='全局训练种子')  # 从0改为42
     parser.add_argument('--local_rank', type=int, default=-1, help='自动DDP多GPU参数，请勿修改')
-
+    parser.add_argument('--mini', action='store_true', help='使用1/10数据进行快速训练')
     # 日志记录器参数
     parser.add_argument('--entity', default=None, help='实体')
     parser.add_argument('--upload_dataset', nargs='?', const=True, default=False, help='上传数据，"val"选项')
@@ -507,6 +509,9 @@ def main(opt, callbacks=Callbacks()):
         else:
             d = torch.load(last, map_location='cpu')['opt']
         opt = argparse.Namespace(**d)  # 替换
+        # 确保兼容新添加的 mini 选项
+        if not hasattr(opt, 'mini'):
+            opt.mini = False
         opt.cfg, opt.weights, opt.resume = '', str(last), True  # 恢复
         if is_url(opt_data):
             opt.data = check_file(opt_data)  # 避免HUB恢复认证超时
