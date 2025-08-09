@@ -1,0 +1,13 @@
+[project]
+name = "binocular-yolov5"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pip>=25.2",
+]
+[[index]]
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"
+default = true
+dependencies = []
