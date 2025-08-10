@@ -123,6 +123,8 @@ dmypy.json
 .pyre/
 
 # YOLO specific
+# keep result.txt under runs/detect but ignore others
+!runs/detect/**/result.txt
 runs/
 wandb/
 weights/
