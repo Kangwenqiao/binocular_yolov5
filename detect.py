@@ -43,16 +43,17 @@ ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 from models.common import DetectMultiBackend
 from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadScreenshots, LoadStreams
 from utils.general import (LOGGER, Profile, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
-                           increment_path, non_max_suppression, print_args, scale_boxes, strip_optimizer, xyxy2xywh)
+                           increment_path, non_max_suppression, print_args, scale_boxes, strip_optimizer, xyxy2xywh,
+                           check_dataset)
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, smart_inference_mode
 
 
 @smart_inference_mode()
 def run(
-        weights=ROOT / 'yolov5s.pt',  # model path or triton URL
-        source=ROOT / 'data/images',  # file/dir/URL/glob/screen/0(webcam)
-        data=ROOT / 'data/coco128.yaml',  # dataset.yaml path
+        weights='best',  # 'best' to auto-select latest runs/train/**/weights/best.pt
+        source='auto',  # 'auto' to use test/val path from data.yaml
+        data=ROOT / 'train_file/train_file.yaml',  # dataset.yaml path
         imgsz=(640, 640),  # inference size (height, width)
         conf_thres=0.25,  # confidence threshold
         iou_thres=0.45,  # NMS IOU threshold
@@ -78,6 +79,27 @@ def run(
         dnn=False,  # use OpenCV DNN for ONNX inference
         vid_stride=1,  # video frame-rate stride
 ):
+    # Auto-resolve weights and source
+    if isinstance(weights, (str, Path)) and str(weights).lower() in ('best', 'auto'):
+        train_root = ROOT / 'runs' / 'train'
+        candidates = sorted(train_root.glob('**/weights/best.pt'), key=lambda p: p.stat().st_mtime, reverse=True)
+        if candidates:
+            weights = str(candidates[0])
+            LOGGER.info(colorstr('Auto-weights: ') + weights)
+        else:
+            LOGGER.warning('No best.pt found under runs/train, using default weights if provided.')
+
+    if isinstance(source, str) and source.lower() in ('auto', 'test'):
+        try:
+            data_dict = check_dataset(data)
+            src = data_dict.get('test') or data_dict.get('val')
+            if isinstance(src, list):
+                src = src[0]
+            source = str(src) if src else str(source)
+            LOGGER.info(colorstr('Auto-source: ') + str(source))
+        except Exception as e:
+            LOGGER.warning(f'Failed to resolve auto source from data.yaml: {e}. Using provided source: {source}')
+
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
@@ -234,9 +256,9 @@ def run(
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / '/home/yolov5-6.0/seabest.pt', help='model path or triton URL')
-    parser.add_argument('--source', type=str, default=ROOT / '/home/yolov5-6.0/seatest/', help='file/dir/URL/glob/screen/0(webcam)')
-    parser.add_argument('--data', type=str, default=ROOT / '', help='(optional) dataset.yaml path')
+    parser.add_argument('--weights', nargs='+', type=str, default='best', help="model path(s) or 'best' for latest runs/train/**/weights/best.pt")
+    parser.add_argument('--source', type=str, default='auto', help="file/dir/URL/glob/screen/0(webcam) or 'auto' to use test/val from data.yaml")
+    parser.add_argument('--data', type=str, default=ROOT / 'train_file/train_file.yaml', help='dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.4, help='NMS IoU threshold')
