@@ -425,7 +425,7 @@ def train(hyp, opt, device, callbacks):  # hyp 可以是 hyp.yaml 的路径，�
                     results, _, _ = validate.run(
                         data_dict,
                         batch_size=batch_size // WORLD_SIZE * 2,
-                        imgsz=imgsz_val,
+                        imgsz=imgsz,
                         model=attempt_load(f, device).half(),
                         iou_thres=0.65 if is_coco else 0.60,  # 最佳 pycocotools 在 iou 0.65
                         single_cls=single_cls,
