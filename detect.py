@@ -26,6 +26,7 @@ Usage - formats:
 """
 
 import argparse
+from copy import deepcopy
 import os
 import platform
 import sys
@@ -101,7 +102,8 @@ def run(
             LOGGER.warning(f'Failed to resolve auto source from data.yaml: {e}. Using provided source: {source}')
 
     source = str(source)
-    save_img = not nosave and not source.endswith('.txt')  # save inference images
+    # Force-disable image saving as per requirement (only write result.txt)
+    save_img = False
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
     is_url = source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
     webcam = source.isnumeric() or source.endswith('.txt') or (is_url and not is_file)
@@ -118,6 +120,30 @@ def run(
     model = DetectMultiBackend(weights, device=device, dnn=dnn, data=data, fp16=half)
     stride, names, pt = model.stride, model.names, model.pt
     imgsz = check_img_size(imgsz, s=stride)  # check image size
+
+    # Prepare result.txt and write first line: params and GFLOPs
+    result_txt = save_dir / 'result.txt'
+    try:
+        # parameter count
+        core_model = model.model if hasattr(model, 'model') else model
+        params = sum(p.numel() for p in core_model.parameters())
+        # FLOPs with thop if available
+        gflops = 0.0
+        try:
+            import thop  # type: ignore
+            m_for_profile = deepcopy(core_model).to('cpu').eval()
+            c_in = 4  # dual-modality input uses 4 channels (vis+ir)
+            dummy = torch.zeros(1, c_in, imgsz[0], imgsz[1], device='cpu')
+            flops, _ = thop.profile(m_for_profile, inputs=(dummy,), verbose=False)
+            gflops = float(flops) / 1e9
+        except Exception:
+            gflops = 0.0
+        with open(result_txt, 'w') as f:
+            f.write(f"{params} {gflops:.3f}\n")
+    except Exception:
+        # Fallback: still create file if not exists
+        with open(result_txt, 'w') as f:
+            f.write("0 0.000\n")
 
     # Dataloader
     bs = 1  # batch_size
@@ -190,6 +216,21 @@ def run(
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()
+                # Write to result.txt in required format
+                with open(result_txt, 'a') as f:
+                    line_parts = [p.name]
+                    for *xyxy, conf, cls in det:
+                        if float(conf) < 0.25:
+                            continue
+                        x_c, y_c, w_box, h_box = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()
+                        line_parts.extend([
+                            f"{x_c:.6f}", f"{y_c:.6f}", f"{w_box:.6f}", f"{h_box:.6f}", f"{float(conf):.6f}", str(int(cls))
+                        ])
+                    f.write(' '.join(line_parts) + '\n')
+            else:
+                # No detections: still write the filename line
+                with open(result_txt, 'a') as f:
+                    f.write(p.name + '\n')
 
                 # Print results
                 for c in det[:, 5].unique():
